@@ -328,11 +328,140 @@ end_hit_test:
   ret
 ; END:hit_test
 
+; ---------------------------------------display_score
 ; BEGIN:display_score
 display_score:
+	
+	; 0 in first two display slots
+	addi t0, zero, font_data + 0
+	ldw t0, SEVEN_SEGS (zero)	      
+	ldw t0, SEVEN_SEGS + 4 (zero) 
+	
+	; updating score
+	ldw t0, SCORE (zero)
+	addi t0, t0, 1
+	stw t0, SCORE (zero)
 
-  ret
-; END:
+	addi t1, zero, 0  ; counter will represent second digit
+	addi t2, zero, 10 ; t2 is 10
+
+loop_numbers:
+	blt t0, t2, end_loop_numbers
+	addi t1, t1, 1
+	sub t0, t0, t2
+	jmpi loop_numbers
+	
+end_loop_numbers:
+	; t0 is the first digit
+	; t1 is the second digit
+
+display_second:
+	addi t7, zero, 8  ; address in score of second display
+	addi t5, zero, 0  ; indicator if finish displaying first and second	
+	
+	addi t3, zero, 0		
+	beq t3, t1, zero	
+	addi t3, t3, 1
+	beq t3, t1, one
+	addi t3, t3, 1
+	beq t3, t1, two
+	addi t3, t3, 1
+	beq t3, t1, three
+	addi t3, t3, 1
+	beq t3, t1, four
+	addi t3, t3, 1
+	beq t3, t1, five
+	addi t3, t3, 1
+	beq t3, t1, six
+	addi t3, t3, 1
+	beq t3, t1, seven
+	addi t3, t3, 1
+	beq t3, t1, eight
+	addi t3, t3, 1
+	beq t3, t1, nine
+
+display_first:
+	bne t5, zero, end_display_score ; if t5 is not 0, already passed in display_first so exit
+ 	addi t5, t5, 1 			; mark passage in display_first
+	addi t7, zero, 12 		; address in score of first display
+
+	addi t3, zero, 0		
+	beq t3, t0, zero	
+	addi t3, t3, 1
+	beq t3, t0, one
+	addi t3, t3, 1
+	beq t3, t0, two
+	addi t3, t3, 1
+	beq t3, t0, three
+	addi t3, t3, 1
+	beq t3, t0, four
+	addi t3, t3, 1
+	beq t3, t0, five
+	addi t3, t3, 1
+	beq t3, t0, six
+	addi t3, t3, 1
+	beq t3, t0, seven
+	addi t3, t3, 1
+	beq t3, t0, eight
+	addi t3, t3, 1
+	beq t3, t0, nine
+	
+
+zero:	
+	addi t6, zero, font_data+0
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first	
+
+one:	
+	addi t6, zero, font_data+4
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first			
+
+two:	
+	addi t6, zero, font_data+8
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+three:	
+	addi t6, zero, font_data+12
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+four:	
+	addi t6, zero, font_data+16
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+five:	
+	addi t6, zero, font_data+20
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+six:	
+	addi t6, zero, font_data+24
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+seven:	
+	addi t6, zero, font_data+28
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+eight:	
+	addi t6, zero, font_data+32
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+
+nine:	
+	addi t6, zero, font_data+36
+	ldw t6, SEVEN_SEGS (t7)		
+	br display_first
+	
+	
+end_display_score:
+	ret
+
+; END:display_score
 
 ; BEGIN:restart_game
 restart_game:
