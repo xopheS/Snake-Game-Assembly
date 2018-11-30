@@ -9,17 +9,46 @@
 .equ RANDOM_NUM,  0x2010 ; Random number generator address
 .equ BUTTONS,     0x2030 ; Button addresses
 
-main:
-  
-  addi sp, sp, LEDS ; stack pointer = LEDS address
+main: 
+  addi sp, zero, LEDS ; stack pointer = LEDS address
+
+  addi v0, zero, 2
 
 game_loop:
+  call wait
   addi t0, zero, 1 ; t0 = 1
+
   ldw t1, BUTTONS + 4 (zero)
-  slli t1, t1, 4
-  and t1, t1, t0
-  bne 
-  jmpi game_loop
+  srli t1, t1, 4
+  and t1, t1, t0 ; t1 = t1 & t0
+  beq t1, zero, post_restart_check ; if button 4 is pressed restart game
+  ldw zero, BUTTONS + 4 (zero)
+  call restart_game
+  call create_food
+  call clear_leds
+  call draw_array
+  call display_score
+  call wait
+post_restart_check:
+  call get_input
+  call hit_test
+  addi t0, zero, 2 ; t0 = 2
+  beq v0, t0, game_loop
+  call clear_leds
+  addi t0, zero, 1 ; t0 = 1
+  bne v0, t0, post_food_check
+  ldw t0, SCORE (zero)
+  addi t0, t0, 1 ; t0++
+  stw t0, SCORE (zero)
+  call create_food
+post_food_check: 
+  call move_snake
+  add v0, zero, zero
+
+  call draw_array
+  call display_score
+
+  jmpi game_loop 
 
 ; ---------------------------------------clear_leds
 ; BEGIN:clear_leds
@@ -34,124 +63,111 @@ clear_leds:
 ; ---------------------------------------set_pixel
 ; BEGIN:set_pixel
 set_pixel:
-  addi t0, zero, 4
-  blt a0, t0, led1
-  addi t0, t0, 4
-  blt a0, t0, led2
-  addi t0, t0, 4
-  blt a0, t0, led3
-  ret
+  slli t0, a0, 3 ; t0 = x * 8
+  add t0, t0, a1 ; t0 = t0 + y
+  addi t1, zero, 1 ; t1 = 1
+  sll t1, t1, t0 ; t1 = t1 << t0
 
-; utility functions
-led1:
-  slli t0, a0, 3
-  add t0, t0, a1
-  addi t1, zero, 1
-  sll t1, t1, t0
-  ldw t2, LEDS (zero)
-  or t1, t2, t1 
-  stw t1, LEDS (zero)
-  jmpi fin
-led2:
-  slli t0, a0, 3
-  add t0, a1, t0
-  addi t1, zero, 1
-  sll t1, t1, t0
-  ldw t2, LEDS + 4 (zero)
-  or t1, t2, t1 
-  stw t1, LEDS + 4 (zero)
-  jmpi fin
-led3:
-  slli t0, a0, 3
-  add t0, a1, t0
-  addi t1, zero, 1
-  sll t1, t1, t0
-  ldw t2, LEDS + 8 (zero)
-  or t1, t2, t1 
-  stw t1, LEDS + 8 (zero)
-  jmpi fin
+  add t4, zero, zero ; t4 = 0
+  addi t3, zero, 4
+  blt a0, t3, draw_pixel
 
-fin:  
+  addi t4, zero, 4 ; t4 = 4
+  addi t3, t3, 4
+  blt a0, t3, draw_pixel
+
+  addi t4, zero, 8 ; t4 = 8
+
+draw_pixel:
+  ldw t2, LEDS (t4)
+  or t2, t2, t1
+  stw t2, LEDS (t4)
+
   ret
 ; END:set_pixel
 
-
-
-; ---------------------------------------get_input
 ; BEGIN:get_input
 get_input:
-  ; t2 edge capture
-  ; t7 value at GSA
-  ; t6 current address in GSA
+  ldw t0, HEAD_X (zero) ; t0 = head_x
+  ldw t1, HEAD_Y (zero) ; t1 = head_y
+  ldw t2, BUTTONS + 4 (zero) ; t2 = edge_capture
 
-  ldw t0, HEAD_X (zero)
-  ldw t1, HEAD_Y (zero)
-  ldw t2, BUTTONS + 4 (zero)
-
-  slli t6, t0, 3
-  add t6, t6, t1
-  ldw t7, GSA (t6)
-
-  addi t5, zero, 1 ; mask initialization at 1
-loop:
-  and t2, t2, t5 ; edge_capture & mask
-  slli t5, t5, 1 ; mask << 1
   beq t2, zero, end_get_input ; end loop
 
-  beq t2, zero, end_get_input ;if equal to 0
-  addi t3, zero, 1
-  beq t2, t3, first_button ;if equal to 1
-  addi t3, zero, 2
-  beq t2, t3, second_button ;if equal to 2
-  addi t3, zero, 4
-  beq t2, t3, third_button ;if equal to 4
-  addi t3, zero, 8
-  beq t2, t3, fourth_button ;if equal to 8
+  slli t6, t0, 3 ; t6 = head_x * 8
+  add t6, t6, t1 ; t6 = t6 + head_y
+  slli t6, t6, 2 ; t6 = t6 * 4
+  ldw t7, GSA (t6) ; t7 = GSA[t6]
 
-first_button:
-  addi t4, zero, 4
-  beq t7, t4, end_get_input
-  stw t2, GSA (t6)
+  addi t5, zero, 1 ; t5 = 1
+loop:
+  and t3, t2, t5 ; t3 = edge_capture & mask
+
+  bne t3, zero, end_loop
+  
+  slli t5, t5, 1 ; t5 = t5 << 1
+  addi t3, zero, 1 ; t3 = 1
+  slli t3, t3, 4 ; t3 = 0b10000
+  bne t0, t3, loop
+  jmpi end_get_input
+end_loop:
+
+  addi t0, zero, 1
+  beq t5, t0, button_zero
+  addi t0, zero, 2
+  beq t5, t0, button_one
+  addi t0, zero, 4
+  beq t5, t0, button_two
+  addi t0, zero, 8
+  beq t5, t0, button_three
+
+button_zero:
+  addi t0, zero, 4
+  beq t7, t0, end_get_input
+  addi t0, zero, 1 
+  stw t0, GSA (t6)
   jmpi end_get_input
 
-second_button:
-  addi t4, zero, 3
-  beq t7, t4, end_get_input
-  stw t2, GSA (t6)
+button_one:
+  addi t0, zero, 3
+  beq t7, t0, end_get_input
+  addi t0, zero, 2
+  stw t0, GSA (t6)
   jmpi end_get_input 
 
-third_button:
-  addi t4, zero, 2
-  beq t7, t4, end_get_input
-  stw t2, GSA (t6) 
+button_two:
+  addi t0, zero, 2
+  beq t7, t0, end_get_input
+  addi t0, zero, 3
+  stw t0, GSA (t6) 
   jmpi end_get_input
 
-fourth_button:
-  addi t4, zero, 1
-  beq t7, t4, end_get_input
-  stw t2, GSA (t6)
+button_three:
+  addi t0, zero, 1
+  beq t7, t0, end_get_input
+  addi t0, zero, 4
+  stw t0, GSA (t6)
   jmpi end_get_input  
   
 end_get_input:
-  stw zero, BUTTONS + 4 (zero) 
+  addi t0, zero, 0b10000
+  ldw t1, BUTTONS + 4 (zero)
+  and t1, t1, t0
+  stw t1, BUTTONS + 4 (zero)
   ret
 
 ; END:get_input
 
-
 ; ---------------------------------------move_snake
 ; BEGIN:move_snake
 move_snake:
-;HEAD
-update_head:
-  ldw t0, HEAD_X (zero)
-  ldw t1, HEAD_Y (zero)
-  ;HEAD position in GSA
-  slli t3, t0, 3
-  add t3, t3, t1
-  ldw t4, GSA (t3)
+  ldw t0, HEAD_X (zero) ; t0 = head_x
+  ldw t1, HEAD_Y (zero) ; t1 = head_y
+  slli t3, t0, 3 ; t3 = x * 8
+  add t3, t3, t1 ; t3 = t3 + head_y
+  slli t3, t3, 2 ; t3 = t3 * 4
+  ldw t4, GSA (t3) ; t4 = GSA[t3]
   
-  beq t4, zero, update_tail
   addi t5, zero, 1
   beq t4, t5, update_left_head
   addi t5, zero, 2
@@ -161,16 +177,38 @@ update_head:
   addi t5, zero, 4
   beq t4, t5, update_right_head
 
-;TAIL
-update_tail:
-  ldw t0, TAIL_X (zero)
-  ldw t1, TAIL_Y (zero)
-  ;TAIL position in GSA
-  slli t3, t0, 3
-  add t3, t3, t1
-  ldw t4, GSA (t3)
+update_up_head:
+  addi t1, t1, -1
+  jmpi update_head 
+update_down_head:
+  addi t1, t1, 1
+  jmpi update_head
+update_left_head:
+  addi t0, t0, -1
+  jmpi update_head 
+update_right_head:
+  addi t0, t0, 1
+  jmpi update_head
 
-  beq t4, zero, end_move_snake
+update_head:
+  stw t0, HEAD_X (zero)
+  stw t1, HEAD_Y (zero)
+  slli t3, t0, 3 ; t3 = head_x * 8
+  add t3, t3, t1 ; t3 = t3 + head_y
+  slli t3, t3, 2 ; t3 = t3 * 4
+  stw t4, GSA (t3)
+
+  addi t0, zero, 1
+  beq v0, t0, end_move_snake
+  ; update tail
+  ldw t0, TAIL_X (zero) ; t0 = tail_x
+  ldw t1, TAIL_Y (zero) ; t1 = tail_y
+  slli t3, t0, 3 ; t3 = tail_x * 8
+  add t3, t3, t1 ; t3 = t3 + tail_y
+  slli t3, t3, 2 ; t3 = t3 * 4
+  ldw t4, GSA (t3) ; t4 = GSA[t3]
+  stw zero, GSA (t3) ; GSA[t3] = 0
+
   addi t5, zero, 1
   beq t4, t5, update_left_tail
   addi t5, zero, 2
@@ -179,67 +217,64 @@ update_tail:
   beq t4, t5, update_down_tail  
   addi t5, zero, 4
   beq t4, t5, update_right_tail
-
-update_up_head:
-  addi t1, t1, -1
-  stw t1, HEAD_Y (zero)
-  jmpi update_tail 
-update_down_head:
-  addi t1, t1, 1
-  stw t1, HEAD_Y (zero)
-  jmpi update_tail 
-update_left_head:
-  addi t0, t0, -1
-  stw t0, HEAD_X (zero)
-  jmpi update_tail 
-update_right_head:
-  addi t0, t0, 1
-  stw t0, HEAD_X (zero)
-  jmpi update_tail 
+ 
 update_up_tail:
   addi t1, t1, -1
-  stw t1, TAIL_Y (zero)
-  jmpi end_move_snake 
+  jmpi update_tail
 update_down_tail:
   addi t1, t1, 1
-  stw t1, TAIL_Y (zero)
-  jmpi end_move_snake 
+  jmpi update_tail
 update_left_tail:
   addi t0, t0, -1
-  stw t0, TAIL_X (zero)
-  jmpi end_move_snake 
+  jmpi update_tail
 update_right_tail:
   addi t0, t0, 1
-  stw t0, TAIL_X (zero)
-  jmpi end_move_snake 
+  jmpi update_tail
+
+update_tail:
+  stw t0, TAIL_X (zero) ; t0 = tail_x
+  stw t1, TAIL_Y (zero) ; t1 = tail_y
 
 end_move_snake:
   ret
-
 ; END:move_snake
 
-; ---------------------------------------draw_array
 ; BEGIN:draw_array
 draw_array:
-  addi t2, zero, 0 ;x
-  addi t3, zero, 0 ;y
-  addi t0, zero, 11 ;xlim
-  addi t1, zero, 7 ;ylim
+  addi s0, zero, 0 ; x = 0
 loopx:
-  addi t3, zero, 0
+  addi s1, zero, 0 ; y = 0
   loopy:
-    addi sp, sp, -8
-    stw a0, 4 (sp)
-    stw a1, 0 (sp)
-    addi a0, t2, 0
-    addi a1, t3, 0
+    add t0, s0, zero ; t0 = x
+    add t1, s1, zero ; t1 = y
+    slli t0, t0, 3 ; t0 = t0 * 8
+    add t0, t0, t1 ; t0 = t0 + t1
+    slli t0, t0, 2 ; t0 = t0 * 4
+    ldw t1, GSA (t0)
+    beq t1, zero, post_pixel
+    addi sp, sp, -20
+    stw a0, 0 (sp)
+    stw a1, 4 (sp)
+    stw s0, 8 (sp)
+    stw s1, 12 (sp)
+    stw ra, 16 (sp)
+    addi a0, s0, 0 ; a0 = x
+    addi a1, s1, 0 ; a1 = y
     call set_pixel
-    ;restore and reset stack
-  	addi t3, t3, 1
- 	bne t3, t1, loopy
+    ldw a0, 0 (sp)
+    ldw a1, 4 (sp)
+    ldw s0, 8 (sp)
+    ldw s1, 12 (sp)
+    ldw ra, 16 (sp)
+    addi sp, sp, 20
+  post_pixel:
+  	addi s1, s1, 1
+    addi t1, zero, 8 ; t1 = max_y + 1
+ 	bne s1, t1, loopy
   
-  addi t2, t2, 1
-  bne t2, t0, loopx
+  addi s0, s0, 1
+  addi t0, zero, 12 ; t0 = max_x + 1
+  bne s0, t0, loopx
 
 end_draw_array:
   ret
@@ -248,17 +283,21 @@ end_draw_array:
 ; BEGIN:create_food
 create_food:
   ldw t0, RANDOM_NUM (zero) ; t0 = random number
-  srli t0, t0, 24 ; t0 = least significant byte
-  blt t0, zero, end_create_food ; if (random < 0) return
+  nor t1, zero, zero ; t1 = not(0)
+  srli t1, t1, 24 ; t1 = t1 >>> 24
+  and t0, t0, t1
+  blt t0, zero, create_food ; if (random < 0) return
   addi t1, zero, 96 ; t1 = 96, 95 is the end bound of game array
-  bge t0, t1, end_create_food ; if (random > 95) return
+  bge t0, t1, create_food ; if (random > 95) return
 
-  slli t2, t0, 2 ; t2 = 4 * t0
-  ldw t3, 0 (t2) ; t3 = GSA[t0]
+  ;addi t0, zero, 11
+
+  slli t0, t0, 2 ; t0 = 4 * t0
+  ldw t3, GSA (t0) ; t3 = GSA[t0]
   bne t3, zero, end_create_food ; if (GSA[t0] != 0) return
 
   addi t4, zero, 5 ; t4 = 5
-  stw t4, 0 (t2) ; GSA[t0] = 5
+  stw t4, GSA (t0) ; GSA[t0] = 5
 
 end_create_food:
   ret
@@ -270,30 +309,37 @@ hit_test:
   ldw t1, HEAD_Y (zero) ; t1 = head_y
   slli t3, t0, 3 ; t3 = t0 * 8
   add t3, t3, t1 ; t3 = t3 + head_y
+  slli t3, t3, 2 ; t3 = t3 * 4
   ldw t4, GSA (t3) ; t4 = GSA[head_x][head_y]
 
   ;TODO update hit test names to predict move
 
   addi t5, zero, 1
-  bne t4, t5, left_hit_test
+  beq t4, t5, left_predict
   addi t5, zero, 2
-  bne t4, t5, up_hit_test
+  beq t4, t5, up_predict
   addi t5, zero, 3
-  bne t4, t5, down_hit_test
+  beq t4, t5, down_predict
   addi t5, zero, 4
-  bne t4, t5, right_hit_test
-left_hit_test:
+  beq t4, t5, right_predict
+left_predict:
   addi t0, t0, -1 ; head_x--
-up_hit_test:
+  jmpi test_end
+up_predict:
   addi t1, t1, -1 ; head_y--
-down_hit_test:
+  jmpi test_end
+down_predict:
   addi t1, t1, 1 ; head_y++
-right_hit_test:
+  jmpi test_end
+right_predict:
   addi t0, t0, 1 ; head_x++
+  jmpi test_end
+test_end: 
 
   addi t3, zero, 0 ; t3 = 0
   slli t3, t0, 3 ; t3 = t0 * 8
   add t3, t3, t1 ; t3 = t3 + head_y
+  slli t3, t3, 2
   ldw t4, GSA (t3) ; t4 = GSA[head_x][head_y] (predicted)
 
   blt t0, zero, screen_body_collide
@@ -303,17 +349,17 @@ right_hit_test:
   bge t0, t6, screen_body_collide
   bge t1, t7, screen_body_collide
 
-  ;collision with food
+  beq t4, zero, end_hit_test
   addi t0, zero, 5
-  bne t4, t0, food_collide
+  beq t4, t0, food_collide
   addi t0, zero, 1
-  bne t4, t0, screen_body_collide
+  beq t4, t0, screen_body_collide
   addi t0, zero, 2
-  bne t4, t0, screen_body_collide
+  beq t4, t0, screen_body_collide
   addi t0, zero, 3
-  bne t4, t0, screen_body_collide
+  beq t4, t0, screen_body_collide
   addi t0, zero, 4
-  bne t4, t0, screen_body_collide
+  beq t4, t0, screen_body_collide
 
 food_collide:
   addi v0, zero, 1
@@ -330,147 +376,63 @@ end_hit_test:
 
 ; ---------------------------------------display_score
 ; BEGIN:display_score
-display_score:
-	
-	; 0 in first two display slots
-	addi t0, zero, font_data + 0
-	ldw t0, SEVEN_SEGS (zero)	      
-	ldw t0, SEVEN_SEGS + 4 (zero) 
-	
-	; updating score
-	ldw t0, SCORE (zero)
-	addi t0, t0, 1
-	stw t0, SCORE (zero)
+display_score:	 
+  ldw t1, SCORE (zero) ; t1 = score
+  
+  ldw t0, font_data (zero) ; t0 = 0xFC
+  stw t0, SEVEN_SEGS (zero) ; SEVEN_SEGS[0] = 0xFC
+  stw t0, SEVEN_SEGS + 4 (zero) ; SEVEN_SEGS[1] = 0xFC
 
-	addi t1, zero, 0  ; counter will represent second digit
-	addi t2, zero, 10 ; t2 is 10
+  addi t3, zero, 10 ; t3 = 10
+  add t2, zero, zero ; t2 = 0
+digit_loop:
+  blt t1, t3, end_digit_loop
+  addi t1, t1, -10 ; t1--
+  addi t2, t2, 1 ; t2++
+  jmpi digit_loop
+end_digit_loop:
 
-loop_numbers:
-	blt t0, t2, end_loop_numbers
-	addi t1, t1, 1
-	sub t0, t0, t2
-	jmpi loop_numbers
-	
-end_loop_numbers:
-	; t0 is the first digit
-	; t1 is the second digit
-
-display_second:
-	addi t7, zero, 8  ; address in score of second display
-	addi t5, zero, 0  ; indicator if finish displaying first and second	
-	
-	addi t3, zero, 0		
-	beq t3, t1, zero	
-	addi t3, t3, 1
-	beq t3, t1, one
-	addi t3, t3, 1
-	beq t3, t1, two
-	addi t3, t3, 1
-	beq t3, t1, three
-	addi t3, t3, 1
-	beq t3, t1, four
-	addi t3, t3, 1
-	beq t3, t1, five
-	addi t3, t3, 1
-	beq t3, t1, six
-	addi t3, t3, 1
-	beq t3, t1, seven
-	addi t3, t3, 1
-	beq t3, t1, eight
-	addi t3, t3, 1
-	beq t3, t1, nine
-
-display_first:
-	bne t5, zero, end_display_score ; if t5 is not 0, already passed in display_first so exit
- 	addi t5, t5, 1 			; mark passage in display_first
-	addi t7, zero, 12 		; address in score of first display
-
-	addi t3, zero, 0		
-	beq t3, t0, zero	
-	addi t3, t3, 1
-	beq t3, t0, one
-	addi t3, t3, 1
-	beq t3, t0, two
-	addi t3, t3, 1
-	beq t3, t0, three
-	addi t3, t3, 1
-	beq t3, t0, four
-	addi t3, t3, 1
-	beq t3, t0, five
-	addi t3, t3, 1
-	beq t3, t0, six
-	addi t3, t3, 1
-	beq t3, t0, seven
-	addi t3, t3, 1
-	beq t3, t0, eight
-	addi t3, t3, 1
-	beq t3, t0, nine
-	
-
-zero:	
-	addi t6, zero, font_data+0
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first	
-
-one:	
-	addi t6, zero, font_data+4
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first			
-
-two:	
-	addi t6, zero, font_data+8
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-three:	
-	addi t6, zero, font_data+12
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-four:	
-	addi t6, zero, font_data+16
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-five:	
-	addi t6, zero, font_data+20
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-six:	
-	addi t6, zero, font_data+24
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-seven:	
-	addi t6, zero, font_data+28
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-eight:	
-	addi t6, zero, font_data+32
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-
-nine:	
-	addi t6, zero, font_data+36
-	ldw t6, SEVEN_SEGS (t7)		
-	br display_first
-	
+  slli t2, t2, 2 ; t2 = t2 * 4
+  ldw t0, font_data (t2)
+  stw t0, SEVEN_SEGS + 8 (zero)
+  slli t1, t1, 2 ; t1 = t1 * 4
+  ldw t0, font_data (t1)
+  stw t0, SEVEN_SEGS + 12 (zero)
 	
 end_display_score:
 	ret
-
 ; END:display_score
 
 ; BEGIN:restart_game
 restart_game:
+  add a0, zero, zero
+  add a1, zero, zero
+  add a2, zero, zero
+  add a3, zero, zero
+  add s0, zero, zero
+  add s1, zero, zero
+  add s2, zero, zero
+  add s3, zero, zero
+  add s4, zero, zero
+  add s5, zero, zero
+  add s6, zero, zero
+  add s7, zero, zero
+  add v0, zero, zero
   stw zero, TAIL_X (zero) ; tail_x = 0
   stw zero, TAIL_Y (zero) ; tail_y = 0
   stw zero, HEAD_X (zero) ; head_x = 0
   stw zero, HEAD_Y (zero) ; head_y = 0
+  stw zero, SCORE (zero) ; score = 0
+  stw zero, BUTTONS + 4 (zero)
   addi t0, zero, 4 ; t0 = 4
   stw t0, GSA (zero) ; GSA[0] = 4
+
+  addi t2, zero, 384
+  addi t0, zero, 4
+gsa_loop:
+  addi t0, t0, 4
+  stw zero, GSA (t0)
+  blt t0, t2, gsa_loop
 
   ret
 ; END:restart_game
@@ -478,15 +440,18 @@ restart_game:
 ; ---------------------------------------wait
 ; BEGIN:wait
 wait:
- ;addi t0, zero, 100000
- ;addi t0, t0, -1
- ;bne t0, r0, wait
- ;ret
+  addi t1, zero, 1000
+count_1:
+  addi t0, zero, 10000
+count_2:
+  addi t0, t0, -1
+  bne t0, zero, count_2
+  addi t1, t1, -1
+  bne t1, zero, count_1
+
+  ret
 ; utility function
 
-
-
-; ---------------------------------------END
 end:
  break
 
