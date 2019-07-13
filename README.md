@@ -1,4 +1,3 @@
-# Snake-Game-Assembly
 ---
 author:
 - Christophe Saad
