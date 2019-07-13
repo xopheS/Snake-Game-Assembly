@@ -10,4 +10,4 @@ title: Snake-Game-Assembly
 
 Description
 ===========
-Snake Game in assembly coded using Nios II instructions
+Snake Game coded in assembly langage using Nios II instructions
